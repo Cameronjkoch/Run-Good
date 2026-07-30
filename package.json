@@ -1,0 +1,8 @@
+{
+  "name": "run-good",
+  "private": true,
+  "workspaces": [
+    "engine",
+    "app"
+  ]
+}

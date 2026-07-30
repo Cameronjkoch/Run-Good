@@ -24,6 +24,27 @@ export interface RevealDelta {
   delta: number;
 }
 
+/** Equity table across one reveal, for the players live at that reveal. */
+export interface StreetEquity {
+  street: 'flop' | 'turn' | 'river';
+  revealedCards: Card[];
+  playerIds: string[];
+  before: number[];
+  after: number[];
+}
+
+/** Pure, serializable analysis of a single completed hand. */
+export interface HandAnalysis {
+  handNo: number;
+  dealtLuck: Record<string, number>;
+  deltas: RevealDelta[];
+  streetEquities: StreetEquity[];
+  /** Hand winners — by showdown, or the last player standing. Empty if undecidable. */
+  winners: string[];
+  showdown: boolean;
+  foldedEventualWinners: string[];
+}
+
 export interface PlayerLuck {
   playerId: string;
   name: string;
@@ -49,6 +70,65 @@ const REVEALS = [
   { street: 'river', before: 4, after: 5 },
 ] as const;
 
+export function analyzeHand(hand: HandRecord, rng: Rng, mcIters = 20000): HandAnalysis {
+  const dealtLuck: Record<string, number> = {};
+  for (const hp of hand.players) {
+    dealtLuck[hp.playerId] = equityVsRandom(hp.hole, rng) - 0.5;
+  }
+
+  const deltas: RevealDelta[] = [];
+  const streetEquities: StreetEquity[] = [];
+  for (const reveal of REVEALS) {
+    if (hand.board.length < reveal.after) break;
+    const active = activeForReveal(hand.players, reveal.street);
+    if (active.length < 2) break;
+    const holes = active.map((p) => p.hole);
+    const before = equity(holes, hand.board.slice(0, reveal.before), rng, mcIters);
+    const after = equity(holes, hand.board.slice(0, reveal.after), rng, mcIters);
+    const revealedCards = hand.board.slice(reveal.before, reveal.after);
+    streetEquities.push({
+      street: reveal.street,
+      revealedCards,
+      playerIds: active.map((p) => p.playerId),
+      before,
+      after,
+    });
+    active.forEach((p, i) => {
+      deltas.push({
+        handNo: hand.handNo,
+        playerId: p.playerId,
+        street: reveal.street,
+        revealedCards,
+        delta: after[i] - before[i],
+      });
+    });
+  }
+
+  const survivors = hand.players.filter((p) => p.foldedOn === undefined);
+  let winners: string[] = [];
+  let showdown = false;
+  if (survivors.length === 1) {
+    winners = [survivors[0].playerId];
+  } else if (survivors.length > 1 && hand.board.length === 5) {
+    showdown = true;
+    winners = winnersAtShowdown(survivors.map((p) => p.hole), hand.board).map(
+      (i) => survivors[i].playerId,
+    );
+  }
+
+  const foldedEventualWinners: string[] = [];
+  if (hand.board.length === 5 && survivors.length >= 1) {
+    const best = Math.max(...survivors.map((p) => evaluate7([...p.hole, ...hand.board])));
+    for (const p of hand.players) {
+      if (p.foldedOn !== undefined && evaluate7([...p.hole, ...hand.board]) > best) {
+        foldedEventualWinners.push(p.playerId);
+      }
+    }
+  }
+
+  return { handNo: hand.handNo, dealtLuck, deltas, streetEquities, winners, showdown, foldedEventualWinners };
+}
+
 export function analyzeSession(session: Session, rng: Rng, mcIters = 20000): SessionAnalysis {
   const byId = new Map<string, PlayerLuck>();
   const ensure = (id: string, name?: string): PlayerLuck => {
@@ -72,68 +152,25 @@ export function analyzeSession(session: Session, rng: Rng, mcIters = 20000): Ses
 
   const allDeltas: RevealDelta[] = [];
   for (const hand of session.hands) {
-    analyzeHandInto(hand, byId, ensure, allDeltas, rng, mcIters);
+    const a = analyzeHand(hand, rng, mcIters);
+    for (const hp of hand.players) {
+      const pl = ensure(hp.playerId);
+      pl.handsDealt++;
+      pl.dealtLuck += a.dealtLuck[hp.playerId];
+    }
+    for (const d of a.deltas) {
+      allDeltas.push(d);
+      const pl = ensure(d.playerId);
+      pl.runoutLuck += d.delta;
+      if (d.delta > 0 && (!pl.biggestSuckout || d.delta > pl.biggestSuckout.delta)) pl.biggestSuckout = d;
+      if (d.delta < 0 && (!pl.worstBeat || d.delta < pl.worstBeat.delta)) pl.worstBeat = d;
+    }
+    for (const w of a.winners) ensure(w).handsWon++;
+    for (const f of a.foldedEventualWinners) ensure(f).foldedEventualWinner++;
   }
 
   const leaderboard = [...byId.values()];
   for (const pl of leaderboard) pl.totalLuck = pl.dealtLuck + pl.runoutLuck;
   leaderboard.sort((a, b) => b.totalLuck - a.totalLuck);
   return { leaderboard, deltas: allDeltas };
-}
-
-function analyzeHandInto(
-  hand: HandRecord,
-  byId: Map<string, PlayerLuck>,
-  ensure: (id: string) => PlayerLuck,
-  allDeltas: RevealDelta[],
-  rng: Rng,
-  mcIters: number,
-): void {
-  for (const hp of hand.players) {
-    const pl = ensure(hp.playerId);
-    pl.handsDealt++;
-    pl.dealtLuck += equityVsRandom(hp.hole, rng) - 0.5;
-  }
-
-  for (const reveal of REVEALS) {
-    if (hand.board.length < reveal.after) break;
-    const active = activeForReveal(hand.players, reveal.street);
-    if (active.length < 2) break;
-    const holes = active.map((p) => p.hole);
-    const before = equity(holes, hand.board.slice(0, reveal.before), rng, mcIters);
-    const after = equity(holes, hand.board.slice(0, reveal.after), rng, mcIters);
-    active.forEach((p, i) => {
-      const delta = after[i] - before[i];
-      const rd: RevealDelta = {
-        handNo: hand.handNo,
-        playerId: p.playerId,
-        street: reveal.street,
-        revealedCards: hand.board.slice(reveal.before, reveal.after),
-        delta,
-      };
-      allDeltas.push(rd);
-      const pl = ensure(p.playerId);
-      pl.runoutLuck += delta;
-      if (delta > 0 && (!pl.biggestSuckout || delta > pl.biggestSuckout.delta)) pl.biggestSuckout = rd;
-      if (delta < 0 && (!pl.worstBeat || delta < pl.worstBeat.delta)) pl.worstBeat = rd;
-    });
-  }
-
-  const survivors = hand.players.filter((p) => p.foldedOn === undefined);
-  if (survivors.length === 1) {
-    ensure(survivors[0].playerId).handsWon++;
-  } else if (survivors.length > 1 && hand.board.length === 5) {
-    for (const i of winnersAtShowdown(survivors.map((p) => p.hole), hand.board)) {
-      ensure(survivors[i].playerId).handsWon++;
-    }
-  }
-
-  if (hand.board.length === 5 && survivors.length >= 1) {
-    const bestShowdown = Math.max(...survivors.map((p) => evaluate7([...p.hole, ...hand.board])));
-    for (const p of hand.players) {
-      if (p.foldedOn !== undefined && evaluate7([...p.hole, ...hand.board]) > bestShowdown) {
-        ensure(p.playerId).foldedEventualWinner++;
-      }
-    }
-  }
 }

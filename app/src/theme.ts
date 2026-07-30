@@ -1,0 +1,16 @@
+export const colors = {
+  felt: '#0c3b2a',
+  feltDark: '#082418',
+  panel: 'rgba(255,255,255,0.06)',
+  panelStrong: 'rgba(255,255,255,0.10)',
+  line: 'rgba(244,239,225,0.14)',
+  cream: '#f4efe1',
+  muted: 'rgba(244,239,225,0.55)',
+  faint: 'rgba(244,239,225,0.35)',
+  gold: '#d9b45b',
+  goldInk: '#2a2008',
+  danger: '#d95b5b',
+  cardFace: '#fbfaf4',
+  inkBlack: '#20242a',
+  inkRed: '#c0392b',
+};
