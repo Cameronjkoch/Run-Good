@@ -233,10 +233,10 @@ function LobbyStage() {
           <BigButton
             label="Everyone's in — start the night 🃏"
             onPress={() => void startNight()}
-            disabled={busy || game.players.length < 2}
+            disabled={busy || game.players.length < 1}
           />
-          {game.players.length < 2 ? (
-            <Text style={styles.note}>Need at least 2 players before you can deal.</Text>
+          {game.players.length < 1 ? (
+            <Text style={styles.note}>Waiting for at least one player to join…</Text>
           ) : null}
         </>
       ) : (
@@ -313,7 +313,7 @@ function HandStage() {
     hand.phase === 'deal' ? 'dealing' : hand.phase === 'recap' ? 'recap' : STREET_LABEL[street];
   const dealtPlayers = hand.dealtIn.map((id) => ({ id, name: nameOf(id) }));
   const amDealtIn = !isHost && !!myPlayerId && hand.dealtIn.includes(myPlayerId);
-  const allIn = dealtPlayers.length >= 2 && dealtPlayers.every((p) => hand.entered[p.id]);
+  const allIn = dealtPlayers.length >= 1 && dealtPlayers.every((p) => hand.entered[p.id]);
   const nextStreetLabel =
     hand.board.length === 0 ? 'flop' : hand.board.length === 3 ? 'turn' : 'river';
 
