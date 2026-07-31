@@ -6,6 +6,8 @@ import { CardSlot, CardView } from '../components/CardView';
 import { RecapView } from '../components/RecapView';
 import { BigButton, ConfirmSheet, Panel } from '../components/ui';
 import { foldLabel, STREET_LABEL } from '../format';
+import { CardScanner } from '../scan/CardScanner';
+import { useScanSettings } from '../scan/scanSettings';
 import { streetForBoard, usedCards, useNight, type CurrentHand } from '../store';
 import { colors } from '../theme';
 
@@ -57,8 +59,11 @@ function DealPhase({ current }: { current: CurrentHand }) {
 
   const [entering, setEntering] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [pickerInitial, setPickerInitial] = useState<Card[] | undefined>(undefined);
   const [passBack, setPassBack] = useState<string | null>(null);
   const [reenter, setReenter] = useState<string | null>(null);
+  const canScan = !!useScanSettings((s) => s.apiKey);
 
   const nameOf = (id: string) => roster.find((r) => r.id === id)?.name ?? id;
   const dealtIn = roster.filter((r) => !current.satOut.includes(r.id));
@@ -100,20 +105,55 @@ function DealPhase({ current }: { current: CurrentHand }) {
       <BigButton label="Start hand ▶" onPress={beginPlay} disabled={!allIn} />
 
       {/* pass-the-phone interstitial */}
-      <Modal visible={!!entering && !pickerOpen} transparent animationType="fade">
+      <Modal visible={!!entering && !pickerOpen && !scanOpen} transparent animationType="fade">
         <View style={styles.overlayCenter}>
           <View style={styles.sheet}>
             <Text style={styles.sheetBig}>📲 Pass the phone to</Text>
             <Text style={styles.sheetName}>{entering ? nameOf(entering) : ''}</Text>
-            <BigButton
-              label={`I'm ${entering ? nameOf(entering) : ''} — enter my cards`}
-              onPress={() => setPickerOpen(true)}
-            />
+            {canScan ? (
+              <>
+                <BigButton label="📷 Scan my cards" onPress={() => setScanOpen(true)} />
+                <View style={{ height: 10 }} />
+                <BigButton label="Type them in" variant="ghost" onPress={() => setPickerOpen(true)} />
+              </>
+            ) : (
+              <BigButton
+                label={`I'm ${entering ? nameOf(entering) : ''} — enter my cards`}
+                onPress={() => setPickerOpen(true)}
+              />
+            )}
             <View style={{ height: 10 }} />
             <BigButton label="Cancel" variant="ghost" onPress={() => setEntering(null)} />
           </View>
         </View>
       </Modal>
+
+      {entering && scanOpen ? (
+        <CardScanner
+          title={`${nameOf(entering)}'s hole cards`}
+          count={2}
+          validate={(cards) =>
+            cards.some((c) => othersCards.has(c))
+              ? 'That card is already in play — double-check with the table.'
+              : null
+          }
+          onDone={(cards) => {
+            setHole(entering, [cards[0], cards[1]]);
+            setScanOpen(false);
+            setPassBack(entering);
+            setEntering(null);
+          }}
+          onCancel={() => {
+            setScanOpen(false);
+            setEntering(null);
+          }}
+          onManual={(initial) => {
+            setScanOpen(false);
+            setPickerInitial(initial);
+            setPickerOpen(true);
+          }}
+        />
+      ) : null}
 
       {entering && pickerOpen ? (
         <CardPicker
@@ -121,6 +161,7 @@ function DealPhase({ current }: { current: CurrentHand }) {
           subtitle="Nobody else can see this screen — enter both cards"
           count={2}
           blocked={new Set(current.board)}
+          initial={pickerInitial}
           validate={(cards) =>
             cards.some((c) => othersCards.has(c))
               ? 'That card is already in play — double-check with the table.'
@@ -129,11 +170,13 @@ function DealPhase({ current }: { current: CurrentHand }) {
           onDone={(cards) => {
             setHole(entering, [cards[0], cards[1]]);
             setPickerOpen(false);
+            setPickerInitial(undefined);
             setPassBack(entering);
             setEntering(null);
           }}
           onCancel={() => {
             setPickerOpen(false);
+            setPickerInitial(undefined);
             setEntering(null);
           }}
         />
@@ -174,9 +217,12 @@ function PlayPhase({ current }: { current: CurrentHand }) {
   const misdeal = useNight((s) => s.misdeal);
 
   const [boardPicker, setBoardPicker] = useState(false);
+  const [boardScan, setBoardScan] = useState(false);
+  const [boardInitial, setBoardInitial] = useState<Card[] | undefined>(undefined);
   const [foldTarget, setFoldTarget] = useState<string | null>(null);
   const [unfoldTarget, setUnfoldTarget] = useState<string | null>(null);
   const [confirmMisdeal, setConfirmMisdeal] = useState(false);
+  const canScan = !!useScanSettings((s) => s.apiKey);
 
   const street = streetForBoard(current.board);
   const nameOf = (id: string) => roster.find((r) => r.id === id)?.name ?? id;
@@ -198,7 +244,17 @@ function PlayPhase({ current }: { current: CurrentHand }) {
         </View>
         <View style={{ height: 12 }} />
         {current.board.length < 5 ? (
-          <BigButton label={`Enter the ${nextStreetLabel}`} onPress={() => setBoardPicker(true)} />
+          <>
+            {canScan ? (
+              <>
+                <BigButton label={`📷 Scan the ${nextStreetLabel}`} onPress={() => setBoardScan(true)} />
+                <View style={{ height: 10 }} />
+                <BigButton label="Type it in" variant="ghost" onPress={() => setBoardPicker(true)} />
+              </>
+            ) : (
+              <BigButton label={`Enter the ${nextStreetLabel}`} onPress={() => setBoardPicker(true)} />
+            )}
+          </>
         ) : (
           <BigButton label="Showdown 🏁" onPress={showdown} />
         )}
@@ -232,6 +288,7 @@ function PlayPhase({ current }: { current: CurrentHand }) {
           subtitle={current.board.length === 0 ? 'All three flop cards' : 'One card'}
           count={current.board.length === 0 ? 3 : 1}
           blocked={new Set(current.board)}
+          initial={boardInitial}
           validate={(cards) =>
             cards.some((c) => holeConflicts.has(c) && !current.board.includes(c))
               ? "That card is already in someone's hand — sort it out with the table."
@@ -240,8 +297,34 @@ function PlayPhase({ current }: { current: CurrentHand }) {
           onDone={(cards) => {
             addBoardCards(cards);
             setBoardPicker(false);
+            setBoardInitial(undefined);
           }}
-          onCancel={() => setBoardPicker(false)}
+          onCancel={() => {
+            setBoardPicker(false);
+            setBoardInitial(undefined);
+          }}
+        />
+      ) : null}
+
+      {boardScan ? (
+        <CardScanner
+          title={`Scan the ${nextStreetLabel}`}
+          count={current.board.length === 0 ? 3 : 1}
+          validate={(cards) =>
+            cards.some((c) => holeConflicts.has(c))
+              ? 'That card is already in play — retake or fix by hand.'
+              : null
+          }
+          onDone={(cards) => {
+            addBoardCards(cards);
+            setBoardScan(false);
+          }}
+          onCancel={() => setBoardScan(false)}
+          onManual={(initial) => {
+            setBoardScan(false);
+            setBoardInitial(initial);
+            setBoardPicker(true);
+          }}
         />
       ) : null}
 

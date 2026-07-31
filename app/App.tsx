@@ -6,6 +6,7 @@ import { HandScreen } from './src/screens/HandScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { OnlineScreen } from './src/screens/OnlineScreen';
+import { ScanSetupScreen } from './src/screens/ScanSetupScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
 import { useNight } from './src/store';
 import { colors } from './src/theme';
@@ -27,6 +28,8 @@ export default function App() {
           <HandScreen />
         ) : screen === 'online' ? (
           <OnlineScreen />
+        ) : screen === 'scan-setup' ? (
+          <ScanSetupScreen />
         ) : (
           <LeaderboardScreen />
         )}

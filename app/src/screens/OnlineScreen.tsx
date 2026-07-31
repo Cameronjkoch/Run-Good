@@ -9,6 +9,8 @@ import { RecapView } from '../components/RecapView';
 import { BigButton, ConfirmSheet, Panel } from '../components/ui';
 import { foldLabel, STREET_LABEL } from '../format';
 import { isFirebaseConfigured } from '../online/firebase';
+import { CardScanner } from '../scan/CardScanner';
+import { useScanSettings } from '../scan/scanSettings';
 import { useOnline } from '../online/onlineStore';
 import { leaderboardRows, streetForBoard, useNight, type LeaderRow } from '../store';
 import { colors } from '../theme';
@@ -199,10 +201,15 @@ function HandStage() {
   const goHome = useNight((s) => s.go);
 
   const [holePicker, setHolePicker] = useState(false);
+  const [holeScan, setHoleScan] = useState(false);
+  const [holeInitial, setHoleInitial] = useState<Card[] | undefined>(undefined);
   const [boardPicker, setBoardPicker] = useState(false);
+  const [boardScan, setBoardScan] = useState(false);
+  const [boardInitial, setBoardInitial] = useState<Card[] | undefined>(undefined);
   const [foldTarget, setFoldTarget] = useState<string | null>(null);
   const [unfoldTarget, setUnfoldTarget] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const canScan = !!useScanSettings((s) => s.apiKey);
 
   const nameOf = (id: string) => game?.players.find((p) => p.id === id)?.name ?? id;
 
@@ -271,6 +278,12 @@ function HandStage() {
                 <View style={{ height: 10 }} />
                 <BigButton label="Re-enter my cards" variant="ghost" onPress={() => setHolePicker(true)} />
               </>
+            ) : canScan ? (
+              <>
+                <BigButton label="📷 Scan my cards" onPress={() => setHoleScan(true)} disabled={busy} />
+                <View style={{ height: 10 }} />
+                <BigButton label="Type them in" variant="ghost" onPress={() => setHolePicker(true)} />
+              </>
             ) : (
               <BigButton label="Enter my cards 🂠" onPress={() => setHolePicker(true)} disabled={busy} />
             )}
@@ -301,7 +314,15 @@ function HandStage() {
               </View>
               <View style={{ height: 12 }} />
               {hand.board.length < 5 ? (
-                <BigButton label={`Enter the ${nextStreetLabel}`} onPress={() => setBoardPicker(true)} />
+                canScan ? (
+                  <>
+                    <BigButton label={`📷 Scan the ${nextStreetLabel}`} onPress={() => setBoardScan(true)} />
+                    <View style={{ height: 10 }} />
+                    <BigButton label="Type it in" variant="ghost" onPress={() => setBoardPicker(true)} />
+                  </>
+                ) : (
+                  <BigButton label={`Enter the ${nextStreetLabel}`} onPress={() => setBoardPicker(true)} />
+                )
               ) : (
                 <BigButton label="Showdown 🏁" onPress={() => void showdown()} disabled={busy} />
               )}
@@ -376,11 +397,38 @@ function HandStage() {
           subtitle="Only your phone sees these until the hand ends"
           count={2}
           blocked={new Set(hand.board)}
+          initial={holeInitial}
           onDone={(cards) => {
             void enterMyCards([cards[0], cards[1]]);
             setHolePicker(false);
+            setHoleInitial(undefined);
           }}
-          onCancel={() => setHolePicker(false)}
+          onCancel={() => {
+            setHolePicker(false);
+            setHoleInitial(undefined);
+          }}
+        />
+      ) : null}
+
+      {holeScan && myPlayerId ? (
+        <CardScanner
+          title="Scan your hole cards"
+          count={2}
+          validate={(cards) =>
+            cards.some((c) => hand.board.includes(c))
+              ? 'That card is on the board — retake or fix by hand.'
+              : null
+          }
+          onDone={(cards) => {
+            void enterMyCards([cards[0], cards[1]]);
+            setHoleScan(false);
+          }}
+          onCancel={() => setHoleScan(false)}
+          onManual={(initial) => {
+            setHoleScan(false);
+            setHoleInitial(initial);
+            setHolePicker(true);
+          }}
         />
       ) : null}
 
@@ -390,11 +438,42 @@ function HandStage() {
           subtitle={hand.board.length === 0 ? 'All three flop cards' : 'One card'}
           count={hand.board.length === 0 ? 3 : 1}
           blocked={new Set([...hand.board, ...(myHole?.handNo === hand.handNo ? myHole.cards : [])])}
+          initial={boardInitial}
           onDone={(cards) => {
             void addBoardCards(cards);
             setBoardPicker(false);
+            setBoardInitial(undefined);
           }}
-          onCancel={() => setBoardPicker(false)}
+          onCancel={() => {
+            setBoardPicker(false);
+            setBoardInitial(undefined);
+          }}
+        />
+      ) : null}
+
+      {boardScan ? (
+        <CardScanner
+          title={`Scan the ${nextStreetLabel}`}
+          count={hand.board.length === 0 ? 3 : 1}
+          validate={(cards) =>
+            cards.some(
+              (c) =>
+                hand.board.includes(c) ||
+                (myHole?.handNo === hand.handNo && myHole.cards.includes(c)),
+            )
+              ? 'That card is already in play — retake or fix by hand.'
+              : null
+          }
+          onDone={(cards) => {
+            void addBoardCards(cards);
+            setBoardScan(false);
+          }}
+          onCancel={() => setBoardScan(false)}
+          onManual={(initial) => {
+            setBoardScan(false);
+            setBoardInitial(initial);
+            setBoardPicker(true);
+          }}
         />
       ) : null}
 

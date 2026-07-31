@@ -16,6 +16,7 @@ export function CardPicker({
   validate,
   onDone,
   onCancel,
+  initial,
 }: {
   title: string;
   subtitle?: string;
@@ -26,8 +27,10 @@ export function CardPicker({
   validate?: (cards: Card[]) => string | null;
   onDone: (cards: Card[]) => void;
   onCancel: () => void;
+  /** Pre-filled selection (e.g. from a camera scan being corrected). */
+  initial?: Card[];
 }) {
-  const [selected, setSelected] = useState<Card[]>([]);
+  const [selected, setSelected] = useState<Card[]>(initial ?? []);
   const [rank, setRank] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 

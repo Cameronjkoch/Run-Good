@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@run-good/engine": "*",
     "expo": "~54.0.0",
+    "expo-camera": "~17.0.10",
     "expo-status-bar": "~3.0.9",
     "firebase": "^12.17.0",
     "react": "19.1.0",

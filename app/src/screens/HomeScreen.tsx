@@ -42,6 +42,8 @@ export function HomeScreen() {
         )}
         <View style={{ height: 12 }} />
         <BigButton label="Multi-phone table 📡" variant="ghost" onPress={() => go('online')} />
+        <View style={{ height: 12 }} />
+        <BigButton label="Camera scanning 📷" variant="ghost" onPress={() => go('scan-setup')} />
       </View>
 
       <ConfirmSheet

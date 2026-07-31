@@ -12,7 +12,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { emptyAgg, mergeAnalysis, type Aggregate } from './aggregate';
 
-export type Screen = 'home' | 'setup' | 'hand' | 'leaderboard' | 'online';
+export type Screen = 'home' | 'setup' | 'hand' | 'leaderboard' | 'online' | 'scan-setup';
 export type HandPhase = 'deal' | 'play' | 'recap';
 
 export type { Aggregate } from './aggregate';
