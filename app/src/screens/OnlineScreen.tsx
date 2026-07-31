@@ -292,8 +292,6 @@ function HandStage() {
   const [boardPicker, setBoardPicker] = useState(false);
   const [boardScan, setBoardScan] = useState(false);
   const [boardInitial, setBoardInitial] = useState<Card[] | undefined>(undefined);
-  const [foldTarget, setFoldTarget] = useState<string | null>(null);
-  const [unfoldTarget, setUnfoldTarget] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const canScan = !!useScanSettings((s) => s.apiKey);
 
@@ -494,7 +492,7 @@ function HandStage() {
                       {isHost ? (
                         <Pressable
                           onPress={() =>
-                            foldedStreet ? setUnfoldTarget(p.id) : setFoldTarget(p.id)
+                            void (foldedStreet ? unfold(p.id) : fold(p.id))
                           }
                           style={[
                             styles.foldBtn,
@@ -649,29 +647,6 @@ function HandStage() {
         />
       ) : null}
 
-      <ConfirmSheet
-        visible={!!foldTarget}
-        message={`${foldTarget ? nameOf(foldTarget) : ''} folds ${
-          street === 'preflop' ? 'pre-flop' : `on the ${street}`
-        }?`}
-        confirmLabel="Fold"
-        danger
-        onConfirm={() => {
-          if (foldTarget) void fold(foldTarget);
-          setFoldTarget(null);
-        }}
-        onCancel={() => setFoldTarget(null)}
-      />
-      <ConfirmSheet
-        visible={!!unfoldTarget}
-        message={`Un-fold ${unfoldTarget ? nameOf(unfoldTarget) : ''}? (Fat-finger fix.)`}
-        confirmLabel="Un-fold"
-        onConfirm={() => {
-          if (unfoldTarget) void unfold(unfoldTarget);
-          setUnfoldTarget(null);
-        }}
-        onCancel={() => setUnfoldTarget(null)}
-      />
       <ConfirmSheet
         visible={confirmLeave}
         message={
