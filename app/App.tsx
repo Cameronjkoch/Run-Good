@@ -5,6 +5,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { HandScreen } from './src/screens/HandScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
+import { OnlineScreen } from './src/screens/OnlineScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
 import { useNight } from './src/store';
 import { colors } from './src/theme';
@@ -24,6 +25,8 @@ export default function App() {
           <SetupScreen />
         ) : screen === 'hand' ? (
           <HandScreen />
+        ) : screen === 'online' ? (
+          <OnlineScreen />
         ) : (
           <LeaderboardScreen />
         )}

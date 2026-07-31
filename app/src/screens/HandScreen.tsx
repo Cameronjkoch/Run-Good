@@ -1,16 +1,11 @@
-import {
-  CATEGORY_NAMES,
-  categoryOf,
-  evaluate7,
-  type Card,
-  type HandRecord,
-} from '@run-good/engine';
+import { type Card, type HandRecord } from '@run-good/engine';
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CardPicker } from '../components/CardPicker';
 import { CardSlot, CardView } from '../components/CardView';
+import { RecapView } from '../components/RecapView';
 import { BigButton, ConfirmSheet, Panel } from '../components/ui';
-import { fmtLuck, foldLabel, STREET_LABEL } from '../format';
+import { foldLabel, STREET_LABEL } from '../format';
 import { streetForBoard, usedCards, useNight, type CurrentHand } from '../store';
 import { colors } from '../theme';
 
@@ -303,84 +298,19 @@ function RecapPhase({ current }: { current: CurrentHand }) {
   if (!a || !rec || rec.handNo !== current.handNo) return null;
 
   const nameOf = (id: string) => roster.find((r) => r.id === id)?.name ?? id;
-  const winnerNames = a.winners.map(nameOf).join(' & ');
-  const runoutFor = (id: string) =>
-    a.deltas.filter((d) => d.playerId === id).reduce((s, d) => s + d.delta, 0);
 
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
-      <View style={styles.winnerBanner}>
-        <Text style={styles.winnerText}>
-          🏆 {winnerNames || 'Nobody'} win{a.winners.length === 1 ? 's' : ''} hand #{rec.handNo}
-        </Text>
-        {!a.showdown ? <Text style={styles.winnerSub}>no showdown — cards stay hidden</Text> : null}
-      </View>
-
-      {a.showdown ? (
-        <Panel title="Showdown">
-          {rec.players.map((p) => {
-            const won = a.winners.includes(p.playerId);
-            const label = p.foldedOn
-              ? foldLabel(p.foldedOn)
-              : CATEGORY_NAMES[categoryOf(evaluate7([...p.hole, ...rec.board] as Card[]))];
-            return (
-              <View key={p.playerId} style={styles.revealRow}>
-                <Text style={[styles.playerName, { flex: 1 }, p.foldedOn && styles.dim]}>
-                  {won ? '⭐ ' : ''}
-                  {nameOf(p.playerId)}
-                </Text>
-                <View style={styles.revealCards}>
-                  <CardView card={p.hole[0]} size="sm" />
-                  <CardView card={p.hole[1]} size="sm" />
-                </View>
-                <Text style={[styles.revealLabel, p.foldedOn && styles.dim]}>{label}</Text>
-              </View>
-            );
-          })}
-          <View style={styles.boardRowSmall}>
-            {rec.board.map((c) => (
-              <CardView key={c} card={c} size="sm" />
-            ))}
-          </View>
-        </Panel>
-      ) : null}
-
-      {a.foldedEventualWinners.length > 0 ? (
-        <>
-          <View style={{ height: 14 }} />
-          <Panel>
-            {a.foldedEventualWinners.map((id) => (
-              <Text key={id} style={styles.gasp}>
-                😱 {nameOf(id)} folded the eventual winner!
-              </Text>
-            ))}
-          </Panel>
-        </>
-      ) : null}
-
-      <View style={{ height: 14 }} />
-      <Panel title="Luck this hand">
-        {rec.players.map((p) => {
-          const dealt = a.dealtLuck[p.playerId] ?? 0;
-          const runout = runoutFor(p.playerId);
-          const total = dealt + runout;
-          return (
-            <View key={p.playerId} style={styles.luckRow}>
-              <Text style={[styles.playerName, { flex: 1.6 }]}>{nameOf(p.playerId)}</Text>
-              <Text style={styles.luckCell}>dealt {fmtLuck(dealt)}</Text>
-              <Text style={styles.luckCell}>runout {fmtLuck(runout)}</Text>
-              <Text style={[styles.luckCell, styles.luckTotal, total >= 0 ? styles.pos : styles.neg]}>
-                {fmtLuck(total)}
-              </Text>
-            </View>
-          );
-        })}
-      </Panel>
-
-      <View style={{ height: 20 }} />
-      <BigButton label="Deal the next hand ▶" onPress={nextHand} />
-      <View style={{ height: 10 }} />
-      <BigButton label="End night — leaderboard" variant="ghost" onPress={() => go('leaderboard')} />
+      <RecapView analysis={a} players={rec.players} board={rec.board} nameOf={nameOf}>
+        <View style={{ height: 20 }} />
+        <BigButton label="Deal the next hand ▶" onPress={nextHand} />
+        <View style={{ height: 10 }} />
+        <BigButton
+          label="End night — leaderboard"
+          variant="ghost"
+          onPress={() => go('leaderboard')}
+        />
+      </RecapView>
     </ScrollView>
   );
 }
