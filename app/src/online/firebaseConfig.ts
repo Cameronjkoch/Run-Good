@@ -1,20 +1,15 @@
 import type { FirebaseOptions } from 'firebase/app';
 
 /**
- * Paste your Firebase web-app config here.
- * Firebase console → Project settings (gear icon) → Your apps → SDK setup and
- * configuration → "Config". It looks like:
- *
- *   export const firebaseConfig: FirebaseOptions | null = {
- *     apiKey: '...',
- *     authDomain: '...',
- *     projectId: '...',
- *     storageBucket: '...',
- *     messagingSenderId: '...',
- *     appId: '...',
- *   };
- *
+ * Firebase web-app config for the run-good project.
  * Web configs are public app identifiers, not secrets — safe to commit.
  * Access control lives in Firestore security rules.
  */
-export const firebaseConfig: FirebaseOptions | null = null;
+export const firebaseConfig: FirebaseOptions | null = {
+  apiKey: 'AIzaSyCL57xVkGD9P2WVhrRaJP9Ee1dylM6TG_I',
+  authDomain: 'run-good-203bb.firebaseapp.com',
+  projectId: 'run-good-203bb',
+  storageBucket: 'run-good-203bb.firebasestorage.app',
+  messagingSenderId: '895130677771',
+  appId: '1:895130677771:web:e2d0e445fafd2c8d47cd0e',
+};
