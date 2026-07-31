@@ -9,9 +9,9 @@ import { RecapView } from '../components/RecapView';
 import { BigButton, ConfirmSheet, Panel } from '../components/ui';
 import { foldLabel, STREET_LABEL } from '../format';
 import { isFirebaseConfigured } from '../online/firebase';
+import { useOnline } from '../online/onlineStore';
 import { CardScanner } from '../scan/CardScanner';
 import { useScanSettings } from '../scan/scanSettings';
-import { useOnline } from '../online/onlineStore';
 import { leaderboardRows, streetForBoard, useNight, type LeaderRow } from '../store';
 import { colors } from '../theme';
 
@@ -30,10 +30,7 @@ export function OnlineScreen() {
     return (
       <View style={styles.center}>
         <Panel title="Multi-phone mode">
-          <Text style={styles.note}>
-            Not wired up yet — the Firebase config hasn't been added. Single-phone mode still works
-            from the home screen.
-          </Text>
+          <Text style={styles.note}>Firebase isn't configured yet.</Text>
         </Panel>
         <View style={{ height: 16 }} />
         <BigButton label="Back" variant="ghost" onPress={() => goHome('home')} />
@@ -49,24 +46,84 @@ export function OnlineScreen() {
 
 /* ---------------------------------- entry --------------------------------- */
 
+type EntryMode = 'choose' | 'host' | 'join';
+
 function EntryStage() {
   const goHome = useNight((s) => s.go);
   const host = useOnline((s) => s.host);
   const join = useOnline((s) => s.join);
   const busy = useOnline((s) => s.busy);
   const error = useOnline((s) => s.error);
+  const clearError = useOnline((s) => s.clearError);
   const savedName = useOnline((s) => s.myName);
+  const [mode, setMode] = useState<EntryMode>('choose');
   const [name, setName] = useState(savedName ?? '');
   const [code, setCode] = useState('');
 
   const nameOk = name.trim().length > 0;
 
+  if (mode === 'choose') {
+    return (
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Run-Good table 🎲</Text>
+        <Text style={styles.subtitle}>
+          The dealer runs the table from their laptop or a spare device — enters the flop/turn/river
+          and marks folds. Each player joins from their own phone and enters their hole cards.
+        </Text>
+
+        <BigButton label="🎯 I'm the dealer" onPress={() => setMode('host')} />
+        <View style={{ height: 12 }} />
+        <BigButton label="🃏 I'm a player" variant="ghost" onPress={() => setMode('join')} />
+
+        <View style={{ height: 18 }} />
+        <BigButton label="Back" variant="ghost" onPress={() => goHome('home')} />
+      </ScrollView>
+    );
+  }
+
+  if (mode === 'host') {
+    return (
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Host a table 🎯</Text>
+        <Text style={styles.subtitle}>
+          You'll run the table but not play. Share the code with the players so they can join from
+          their phones.
+        </Text>
+
+        <Panel title="Your name (as dealer)">
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder="e.g. Cameron"
+            placeholderTextColor={colors.faint}
+            style={styles.input}
+            maxLength={14}
+          />
+        </Panel>
+
+        <View style={{ height: 14 }} />
+        <BigButton label="Create a table" onPress={() => void host(name)} disabled={!nameOk || busy} />
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {busy ? <Text style={styles.note}>Connecting…</Text> : null}
+
+        <View style={{ height: 18 }} />
+        <BigButton
+          label="Back"
+          variant="ghost"
+          onPress={() => {
+            clearError();
+            setMode('choose');
+          }}
+        />
+      </ScrollView>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-      <Text style={styles.title}>Multi-phone table 📡</Text>
-      <Text style={styles.subtitle}>
-        Everyone runs Run-Good on their own phone. One person hosts, the rest join with the code.
-      </Text>
+      <Text style={styles.title}>Join a table 🃏</Text>
+      <Text style={styles.subtitle}>Ask the dealer for the 4-digit code.</Text>
 
       <Panel title="Your name">
         <TextInput
@@ -79,16 +136,9 @@ function EntryStage() {
         />
       </Panel>
 
-      <View style={{ height: 14 }} />
-      <BigButton label="Host a new table" onPress={() => void host(name)} disabled={!nameOk || busy} />
+      <View style={{ height: 12 }} />
 
-      <View style={styles.dividerRow}>
-        <View style={styles.divider} />
-        <Text style={styles.dividerText}>or</Text>
-        <View style={styles.divider} />
-      </View>
-
-      <Panel title="Join with a code">
+      <Panel title="Table code">
         <TextInput
           value={code}
           onChangeText={setCode}
@@ -99,10 +149,10 @@ function EntryStage() {
           maxLength={4}
         />
       </Panel>
+
       <View style={{ height: 14 }} />
       <BigButton
         label="Join table"
-        variant="ghost"
         onPress={() => void join(code, name)}
         disabled={!nameOk || code.trim().length !== 4 || busy}
       />
@@ -111,7 +161,14 @@ function EntryStage() {
       {busy ? <Text style={styles.note}>Connecting…</Text> : null}
 
       <View style={{ height: 18 }} />
-      <BigButton label="Back" variant="ghost" onPress={() => goHome('home')} />
+      <BigButton
+        label="Back"
+        variant="ghost"
+        onPress={() => {
+          clearError();
+          setMode('choose');
+        }}
+      />
     </ScrollView>
   );
 }
@@ -120,6 +177,7 @@ function EntryStage() {
 
 function LobbyStage() {
   const game = useOnline((s) => s.game);
+  const role = useOnline((s) => s.role);
   const myPlayerId = useOnline((s) => s.myPlayerId);
   const startNight = useOnline((s) => s.startNight);
   const busy = useOnline((s) => s.busy);
@@ -135,38 +193,65 @@ function LobbyStage() {
     );
   }
 
+  const isHost = role === 'host';
+
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
       <Text style={styles.title}>Table lobby</Text>
       <Text style={styles.subtitle}>Tell everyone the code:</Text>
       <Text style={styles.code}>{game.code}</Text>
 
+      <Panel title="Dealer">
+        <View style={styles.playerRow}>
+          <Text style={styles.playerName}>
+            🎯 {game.host.name}
+            {isHost ? ' (you)' : ''}
+          </Text>
+        </View>
+      </Panel>
+
+      <View style={{ height: 12 }} />
+
       <Panel title={`Players (${game.players.length})`}>
-        {game.players.map((p) => (
-          <View key={p.id} style={styles.playerRow}>
-            <Text style={styles.playerName}>
-              {p.name}
-              {p.id === myPlayerId ? ' (you)' : ''}
-            </Text>
-          </View>
-        ))}
+        {game.players.length === 0 ? (
+          <Text style={styles.note}>Waiting for players to join…</Text>
+        ) : (
+          game.players.map((p) => (
+            <View key={p.id} style={styles.playerRow}>
+              <Text style={styles.playerName}>
+                {p.name}
+                {p.id === myPlayerId ? ' (you)' : ''}
+              </Text>
+            </View>
+          ))
+        )}
       </Panel>
 
       <View style={{ height: 18 }} />
-      <BigButton
-        label="Everyone's in — start the night 🃏"
-        onPress={() => void startNight()}
-        disabled={busy || game.players.length < 2}
-      />
-      {game.players.length < 2 ? (
-        <Text style={styles.note}>Waiting for at least one more player…</Text>
-      ) : null}
+      {isHost ? (
+        <>
+          <BigButton
+            label="Everyone's in — start the night 🃏"
+            onPress={() => void startNight()}
+            disabled={busy || game.players.length < 2}
+          />
+          {game.players.length < 2 ? (
+            <Text style={styles.note}>Need at least 2 players before you can deal.</Text>
+          ) : null}
+        </>
+      ) : (
+        <Text style={styles.note}>Waiting for the dealer to start the night…</Text>
+      )}
       <View style={{ height: 10 }} />
       <BigButton label="Leave table" variant="ghost" onPress={() => setConfirmLeave(true)} />
 
       <ConfirmSheet
         visible={confirmLeave}
-        message="Leave this table?"
+        message={
+          isHost
+            ? 'Leave this table? Nobody else can start the night without a dealer.'
+            : 'Leave this table?'
+        }
         confirmLabel="Leave"
         danger
         onConfirm={() => {
@@ -185,6 +270,7 @@ function LobbyStage() {
 function HandStage() {
   const game = useOnline((s) => s.game);
   const hand = useOnline((s) => s.hand);
+  const role = useOnline((s) => s.role);
   const myPlayerId = useOnline((s) => s.myPlayerId);
   const myHole = useOnline((s) => s.myHole);
   const enterMyCards = useOnline((s) => s.enterMyCards);
@@ -221,12 +307,12 @@ function HandStage() {
     );
   }
 
+  const isHost = role === 'host';
   const street = streetForBoard(hand.board);
   const phaseLabel =
     hand.phase === 'deal' ? 'dealing' : hand.phase === 'recap' ? 'recap' : STREET_LABEL[street];
   const dealtPlayers = hand.dealtIn.map((id) => ({ id, name: nameOf(id) }));
-  const amDealtIn = !!myPlayerId && hand.dealtIn.includes(myPlayerId);
-  const myCardsIn = !!myPlayerId && !!hand.entered[myPlayerId];
+  const amDealtIn = !isHost && !!myPlayerId && hand.dealtIn.includes(myPlayerId);
   const allIn = dealtPlayers.length >= 2 && dealtPlayers.every((p) => hand.entered[p.id]);
   const nextStreetLabel =
     hand.board.length === 0 ? 'flop' : hand.board.length === 3 ? 'turn' : 'river';
@@ -237,7 +323,9 @@ function HandStage() {
         <Text style={styles.headerLink}>Leave</Text>
       </Pressable>
       <Text style={styles.headerTitle}>
-        #{game.code} · Hand {hand.handNo} <Text style={styles.headerPhase}>· {phaseLabel}</Text>
+        #{game.code} · Hand {hand.handNo}{' '}
+        <Text style={styles.headerPhase}>· {phaseLabel}</Text>
+        {isHost ? <Text style={styles.headerRole}>  · dealer</Text> : null}
       </Text>
       <Pressable onPress={() => goStage('leaderboard')} hitSlop={10}>
         <Text style={styles.headerLink}>Board</Text>
@@ -251,7 +339,7 @@ function HandStage() {
       <ScrollView contentContainerStyle={styles.scroll}>
         {hand.phase === 'deal' ? (
           <>
-            <Panel title={`Hand #${hand.handNo} — everyone enters their own cards`}>
+            <Panel title={`Hand #${hand.handNo} — waiting on each player's cards`}>
               {dealtPlayers.map((p) => (
                 <View key={p.id} style={styles.playerRow}>
                   <Text style={styles.playerName}>
@@ -265,7 +353,20 @@ function HandStage() {
               ))}
             </Panel>
             <View style={{ height: 16 }} />
-            {!amDealtIn ? (
+
+            {isHost ? (
+              <>
+                <Text style={styles.note}>
+                  You're the dealer — players enter their own cards on their phones.
+                </Text>
+                {allIn ? (
+                  <>
+                    <View style={{ height: 10 }} />
+                    <BigButton label="Start hand ▶" onPress={() => void beginPlay()} />
+                  </>
+                ) : null}
+              </>
+            ) : !amDealtIn ? (
               <Text style={styles.note}>You joined mid-hand — you're in from the next deal.</Text>
             ) : myHole?.handNo === hand.handNo ? (
               <>
@@ -276,25 +377,40 @@ function HandStage() {
                   </View>
                 </Panel>
                 <View style={{ height: 10 }} />
-                <BigButton label="Re-enter my cards" variant="ghost" onPress={() => setHolePicker(true)} />
+                <BigButton
+                  label="Re-enter my cards"
+                  variant="ghost"
+                  onPress={() => setHolePicker(true)}
+                />
+                <Text style={styles.note}>Waiting for the dealer to start the hand…</Text>
               </>
             ) : canScan ? (
               <>
-                <BigButton label="📷 Scan my cards" onPress={() => setHoleScan(true)} disabled={busy} />
+                <BigButton
+                  label="📷 Scan my cards"
+                  onPress={() => setHoleScan(true)}
+                  disabled={busy}
+                />
                 <View style={{ height: 10 }} />
-                <BigButton label="Type them in" variant="ghost" onPress={() => setHolePicker(true)} />
+                <BigButton
+                  label="Type them in"
+                  variant="ghost"
+                  onPress={() => setHolePicker(true)}
+                />
               </>
             ) : (
-              <BigButton label="Enter my cards 🂠" onPress={() => setHolePicker(true)} disabled={busy} />
+              <BigButton
+                label="Enter my cards 🂠"
+                onPress={() => setHolePicker(true)}
+                disabled={busy}
+              />
             )}
-            <View style={{ height: 10 }} />
-            {allIn ? <BigButton label="Start hand ▶" onPress={() => void beginPlay()} /> : null}
           </>
         ) : null}
 
         {hand.phase === 'play' ? (
           <>
-            {myHole?.handNo === hand.handNo ? (
+            {!isHost && myHole?.handNo === hand.handNo ? (
               <Panel title="Your cards">
                 <View style={styles.myCards}>
                   <CardView card={myHole.cards[0]} size="md" />
@@ -302,7 +418,8 @@ function HandStage() {
                 </View>
               </Panel>
             ) : null}
-            <View style={{ height: 14 }} />
+            {!isHost ? <View style={{ height: 14 }} /> : null}
+
             <Panel title={`Board — ${STREET_LABEL[street]}`}>
               <View style={styles.boardRow}>
                 {hand.board.map((c) => (
@@ -313,39 +430,81 @@ function HandStage() {
                 ))}
               </View>
               <View style={{ height: 12 }} />
-              {hand.board.length < 5 ? (
-                canScan ? (
-                  <>
-                    <BigButton label={`📷 Scan the ${nextStreetLabel}`} onPress={() => setBoardScan(true)} />
-                    <View style={{ height: 10 }} />
-                    <BigButton label="Type it in" variant="ghost" onPress={() => setBoardPicker(true)} />
-                  </>
+              {isHost ? (
+                hand.board.length < 5 ? (
+                  canScan ? (
+                    <>
+                      <BigButton
+                        label={`📷 Scan the ${nextStreetLabel}`}
+                        onPress={() => setBoardScan(true)}
+                      />
+                      <View style={{ height: 10 }} />
+                      <BigButton
+                        label="Type it in"
+                        variant="ghost"
+                        onPress={() => setBoardPicker(true)}
+                      />
+                    </>
+                  ) : (
+                    <BigButton
+                      label={`Enter the ${nextStreetLabel}`}
+                      onPress={() => setBoardPicker(true)}
+                    />
+                  )
                 ) : (
-                  <BigButton label={`Enter the ${nextStreetLabel}`} onPress={() => setBoardPicker(true)} />
+                  <BigButton
+                    label="Showdown 🏁"
+                    onPress={() => void showdown()}
+                    disabled={busy}
+                  />
                 )
               ) : (
-                <BigButton label="Showdown 🏁" onPress={() => void showdown()} disabled={busy} />
+                <Text style={styles.note}>
+                  {hand.board.length < 5
+                    ? `Waiting for the dealer to enter the ${nextStreetLabel}…`
+                    : 'Waiting for the dealer to run showdown…'}
+                </Text>
               )}
             </Panel>
             <View style={{ height: 14 }} />
-            <Panel title="Players — tap when someone folds">
+
+            <Panel title={isHost ? 'Players — tap when someone folds' : 'Players'}>
               {dealtPlayers
                 .filter((p) => hand.entered[p.id])
                 .map((p) => {
                   const foldedStreet = hand.foldedOn[p.id];
-                  return (
-                    <Pressable
-                      key={p.id}
-                      style={styles.playerRow}
-                      onPress={() => (foldedStreet ? setUnfoldTarget(p.id) : setFoldTarget(p.id))}
-                    >
+                  const row = (
+                    <>
                       <Text style={[styles.playerName, foldedStreet && styles.dim]}>
                         {p.name}
                         {p.id === myPlayerId ? ' (you)' : ''}
                       </Text>
-                      <Text style={[styles.playerStatus, foldedStreet ? styles.dim : styles.statusIn]}>
+                      <Text
+                        style={[
+                          styles.playerStatus,
+                          foldedStreet ? styles.dim : styles.statusIn,
+                        ]}
+                      >
                         {foldedStreet ? foldLabel(foldedStreet) : 'in the hand'}
                       </Text>
+                    </>
+                  );
+                  if (!isHost) {
+                    return (
+                      <View key={p.id} style={styles.playerRow}>
+                        {row}
+                      </View>
+                    );
+                  }
+                  return (
+                    <Pressable
+                      key={p.id}
+                      style={styles.playerRow}
+                      onPress={() =>
+                        foldedStreet ? setUnfoldTarget(p.id) : setFoldTarget(p.id)
+                      }
+                    >
+                      {row}
                     </Pressable>
                   );
                 })}
@@ -363,7 +522,11 @@ function HandStage() {
                 </Text>
               </Panel>
               <View style={{ height: 16 }} />
-              <BigButton label="Deal the next hand ▶" onPress={() => void nextHand()} />
+              {isHost ? (
+                <BigButton label="Deal the next hand ▶" onPress={() => void nextHand()} />
+              ) : (
+                <Text style={styles.note}>Waiting for the dealer to move on…</Text>
+              )}
             </>
           ) : hand.analysis ? (
             <RecapView
@@ -379,9 +542,17 @@ function HandStage() {
               nameOf={nameOf}
             >
               <View style={{ height: 20 }} />
-              <BigButton label="Deal the next hand ▶" onPress={() => void nextHand()} />
+              {isHost ? (
+                <BigButton label="Deal the next hand ▶" onPress={() => void nextHand()} />
+              ) : (
+                <Text style={styles.note}>Waiting for the dealer to deal the next hand…</Text>
+              )}
               <View style={{ height: 10 }} />
-              <BigButton label="Leaderboard" variant="ghost" onPress={() => goStage('leaderboard')} />
+              <BigButton
+                label="Leaderboard"
+                variant="ghost"
+                onPress={() => goStage('leaderboard')}
+              />
             </RecapView>
           ) : (
             <Text style={styles.note}>Finishing the hand…</Text>
@@ -391,7 +562,7 @@ function HandStage() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </ScrollView>
 
-      {holePicker && myPlayerId ? (
+      {holePicker && !isHost && myPlayerId ? (
         <CardPicker
           title="Your hole cards"
           subtitle="Only your phone sees these until the hand ends"
@@ -410,7 +581,7 @@ function HandStage() {
         />
       ) : null}
 
-      {holeScan && myPlayerId ? (
+      {holeScan && !isHost && myPlayerId ? (
         <CardScanner
           title="Scan your hole cards"
           count={2}
@@ -432,12 +603,12 @@ function HandStage() {
         />
       ) : null}
 
-      {boardPicker ? (
+      {boardPicker && isHost ? (
         <CardPicker
           title={`Enter the ${nextStreetLabel}`}
           subtitle={hand.board.length === 0 ? 'All three flop cards' : 'One card'}
           count={hand.board.length === 0 ? 3 : 1}
-          blocked={new Set([...hand.board, ...(myHole?.handNo === hand.handNo ? myHole.cards : [])])}
+          blocked={new Set(hand.board)}
           initial={boardInitial}
           onDone={(cards) => {
             void addBoardCards(cards);
@@ -451,17 +622,13 @@ function HandStage() {
         />
       ) : null}
 
-      {boardScan ? (
+      {boardScan && isHost ? (
         <CardScanner
           title={`Scan the ${nextStreetLabel}`}
           count={hand.board.length === 0 ? 3 : 1}
           validate={(cards) =>
-            cards.some(
-              (c) =>
-                hand.board.includes(c) ||
-                (myHole?.handNo === hand.handNo && myHole.cards.includes(c)),
-            )
-              ? 'That card is already in play — retake or fix by hand.'
+            cards.some((c) => hand.board.includes(c))
+              ? 'That card is already on the board — retake or fix by hand.'
               : null
           }
           onDone={(cards) => {
@@ -502,7 +669,11 @@ function HandStage() {
       />
       <ConfirmSheet
         visible={confirmLeave}
-        message="Leave this table? You can rejoin with the code and your name."
+        message={
+          isHost
+            ? 'Leave this table? Nobody else can drive the hand without a dealer.'
+            : 'Leave this table? You can rejoin with the code and your name.'
+        }
         confirmLabel="Leave"
         danger
         onConfirm={() => {
@@ -540,10 +711,7 @@ function LeaderboardStage() {
 
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
-      <LeaderboardView
-        rows={rows}
-        handCount={completedHands.filter((h) => h.analysis).length}
-      >
+      <LeaderboardView rows={rows} handCount={completedHands.filter((h) => h.analysis).length}>
         <View style={{ height: 24 }} />
         <BigButton label="Back to the table" onPress={() => goStage('hand')} />
       </LeaderboardView>
@@ -554,10 +722,17 @@ function LeaderboardStage() {
 /* --------------------------------- styles --------------------------------- */
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', padding: 24, maxWidth: 480, width: '100%', alignSelf: 'center' },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+    maxWidth: 480,
+    width: '100%',
+    alignSelf: 'center',
+  },
   scroll: { padding: 20, paddingTop: 28, maxWidth: 520, width: '100%', alignSelf: 'center' },
   title: { color: colors.cream, fontSize: 28, fontWeight: '800' },
-  subtitle: { color: colors.muted, fontSize: 14, marginTop: 6, marginBottom: 18 },
+  subtitle: { color: colors.muted, fontSize: 14, marginTop: 6, marginBottom: 18, lineHeight: 20 },
   code: {
     color: colors.gold,
     fontSize: 56,
@@ -576,9 +751,6 @@ const styles = StyleSheet.create({
     color: colors.cream,
     fontSize: 17,
   },
-  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 16 },
-  divider: { flex: 1, height: 1, backgroundColor: colors.line },
-  dividerText: { color: colors.faint, fontSize: 13 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -590,6 +762,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { color: colors.cream, fontSize: 16, fontWeight: '800' },
   headerPhase: { color: colors.gold, fontWeight: '700' },
+  headerRole: { color: colors.faint, fontWeight: '600' },
   headerLink: { color: colors.muted, fontSize: 14, fontWeight: '700' },
   playerRow: {
     flexDirection: 'row',

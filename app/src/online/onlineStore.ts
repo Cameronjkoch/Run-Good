@@ -33,9 +33,16 @@ export interface OnlinePlayer {
 export interface GameDoc {
   code: string;
   createdAt: number;
+  /** The dealer/scribe — enters the board, drives showdown, doesn't play. */
+  host: OnlinePlayer;
+  /** Actual players; the host is NOT in this list. */
   players: OnlinePlayer[];
   status: 'lobby' | 'playing';
 }
+
+export type OnlineRole = 'host' | 'player';
+
+const HOST_ID = 'host';
 
 export interface HandDoc {
   handNo: number;
@@ -58,6 +65,7 @@ const handDocId = (n: number): string => String(n).padStart(4, '0');
 interface OnlineStore {
   stage: OnlineStage;
   gameId?: string;
+  role?: OnlineRole;
   myPlayerId?: string;
   myName?: string;
   game?: GameDoc;
@@ -220,10 +228,17 @@ export const useOnline = create<OnlineStore>()(
             await setDoc(gref, {
               code,
               createdAt: Date.now(),
-              players: [{ id: 'p1', name: name.trim() }],
+              host: { id: HOST_ID, name: name.trim() },
+              players: [],
               status: 'lobby',
             } satisfies GameDoc);
-            set({ gameId: gref.id, myPlayerId: 'p1', myName: name.trim(), stage: 'lobby' });
+            set({
+              gameId: gref.id,
+              role: 'host',
+              myPlayerId: HOST_ID,
+              myName: name.trim(),
+              stage: 'lobby',
+            });
             await subscribe(gref.id);
           }),
 
@@ -242,8 +257,12 @@ export const useOnline = create<OnlineStore>()(
             await runTransaction(db, async (tx) => {
               const g = await tx.get(gref);
               const gd = g.data() as GameDoc;
+              const trimmed = name.trim();
+              if (gd.host && gd.host.name.toLowerCase() === trimmed.toLowerCase()) {
+                throw new Error('That name is the dealer — pick a different name.');
+              }
               const existing = gd.players.find(
-                (p) => p.name.toLowerCase() === name.trim().toLowerCase(),
+                (p) => p.name.toLowerCase() === trimmed.toLowerCase(),
               );
               if (existing) {
                 myPlayerId = existing.id; // rejoin the same seat by name
@@ -252,10 +271,16 @@ export const useOnline = create<OnlineStore>()(
               if (gd.players.length >= 9) throw new Error('That table is full (9 players max).');
               myPlayerId = `p${gd.players.length + 1}`;
               tx.update(gref, {
-                players: [...gd.players, { id: myPlayerId, name: name.trim() }],
+                players: [...gd.players, { id: myPlayerId, name: trimmed }],
               });
             });
-            set({ gameId: gref.id, myPlayerId, myName: name.trim(), stage: 'lobby' });
+            set({
+              gameId: gref.id,
+              role: 'player',
+              myPlayerId,
+              myName: name.trim(),
+              stage: 'lobby',
+            });
             await subscribe(gref.id);
           }),
 
@@ -271,6 +296,7 @@ export const useOnline = create<OnlineStore>()(
           set({
             stage: 'entry',
             gameId: undefined,
+            role: undefined,
             myPlayerId: undefined,
             game: undefined,
             hand: undefined,
@@ -293,7 +319,14 @@ export const useOnline = create<OnlineStore>()(
         enterMyCards: (cards) =>
           wrap(async () => {
             const s = get();
-            if (!s.gameId || !s.hand || !s.myPlayerId || s.hand.phase !== 'deal') return;
+            if (
+              !s.gameId ||
+              !s.hand ||
+              !s.myPlayerId ||
+              s.role !== 'player' ||
+              s.hand.phase !== 'deal'
+            )
+              return;
             const db = await ensureFirebase();
             const hid = handDocId(s.hand.handNo);
             await setDoc(doc(db, 'games', s.gameId, 'hands', hid, 'holes', s.myPlayerId), {
@@ -379,7 +412,12 @@ export const useOnline = create<OnlineStore>()(
     {
       name: 'run-good-online',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (s) => ({ gameId: s.gameId, myPlayerId: s.myPlayerId, myName: s.myName }),
+      partialize: (s) => ({
+        gameId: s.gameId,
+        role: s.role,
+        myPlayerId: s.myPlayerId,
+        myName: s.myName,
+      }),
     },
   ),
 );
