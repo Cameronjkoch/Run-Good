@@ -468,14 +468,17 @@ function HandStage() {
             </Panel>
             <View style={{ height: 14 }} />
 
-            <Panel title={isHost ? 'Players — tap when someone folds' : 'Players'}>
+            <Panel title="Players">
               {dealtPlayers
                 .filter((p) => hand.entered[p.id])
                 .map((p) => {
                   const foldedStreet = hand.foldedOn[p.id];
-                  const row = (
-                    <>
-                      <Text style={[styles.playerName, foldedStreet && styles.dim]}>
+                  return (
+                    <View key={p.id} style={styles.playerRow}>
+                      <Text
+                        style={[styles.playerName, { flex: 1 }, foldedStreet && styles.dim]}
+                        numberOfLines={1}
+                      >
                         {p.name}
                         {p.id === myPlayerId ? ' (you)' : ''}
                       </Text>
@@ -483,29 +486,31 @@ function HandStage() {
                         style={[
                           styles.playerStatus,
                           foldedStreet ? styles.dim : styles.statusIn,
+                          { marginRight: isHost ? 10 : 0 },
                         ]}
                       >
                         {foldedStreet ? foldLabel(foldedStreet) : 'in the hand'}
                       </Text>
-                    </>
-                  );
-                  if (!isHost) {
-                    return (
-                      <View key={p.id} style={styles.playerRow}>
-                        {row}
-                      </View>
-                    );
-                  }
-                  return (
-                    <Pressable
-                      key={p.id}
-                      style={styles.playerRow}
-                      onPress={() =>
-                        foldedStreet ? setUnfoldTarget(p.id) : setFoldTarget(p.id)
-                      }
-                    >
-                      {row}
-                    </Pressable>
+                      {isHost ? (
+                        <Pressable
+                          onPress={() =>
+                            foldedStreet ? setUnfoldTarget(p.id) : setFoldTarget(p.id)
+                          }
+                          style={[
+                            styles.foldBtn,
+                            foldedStreet ? styles.unfoldBtn : styles.foldBtnActive,
+                          ]}
+                        >
+                          <Text
+                            style={
+                              foldedStreet ? styles.unfoldBtnText : styles.foldBtnText
+                            }
+                          >
+                            {foldedStreet ? 'Un-fold' : 'Fold'}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
                   );
                 })}
             </Panel>
@@ -780,4 +785,16 @@ const styles = StyleSheet.create({
   boardRow: { flexDirection: 'row', gap: 8, justifyContent: 'center' },
   note: { color: colors.muted, fontSize: 14, textAlign: 'center', marginTop: 12 },
   error: { color: colors.danger, fontSize: 14, textAlign: 'center', marginTop: 12, fontWeight: '600' },
+  foldBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    minWidth: 74,
+    alignItems: 'center',
+  },
+  foldBtnActive: { borderColor: colors.danger, backgroundColor: 'rgba(220, 92, 92, 0.12)' },
+  foldBtnText: { color: colors.danger, fontSize: 13, fontWeight: '800', letterSpacing: 0.4 },
+  unfoldBtn: { borderColor: colors.line, backgroundColor: 'transparent' },
+  unfoldBtnText: { color: colors.muted, fontSize: 13, fontWeight: '700' },
 });
