@@ -7,7 +7,7 @@ import { cardToString, fullDeck, parseCard, type Card } from '@run-good/engine';
  * the Metro bundler). Structured output constrains the model to valid card
  * codes. Swap to 'claude-haiku-4-5' for cheaper (slightly less accurate) scans.
  */
-export const SCAN_MODEL = 'claude-opus-5';
+export const SCAN_MODEL = 'claude-haiku-4-5';
 
 const ALL_CARD_CODES = fullDeck().map(cardToString);
 
